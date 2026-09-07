@@ -5,8 +5,8 @@ import argparse
 import pytest
 
 from nemo_gym.config_types import ConfigError
-from nemo_gym.statistical_tests import paired
-from nemo_gym.statistical_tests.paired import PairedTestConfig
+from nemo_gym.statistical_tests import paired_t_test
+from nemo_gym.statistical_tests.paired_t_test import PairedTTestConfig
 from nemo_gym.statistical_tests.registry import STAT_TESTS, StatTest, build_config, resolve_stat_test
 from nemo_gym.statistical_tests.schema import DEFAULT_STAT_TEST, STATS_SUBDIR_NAME, StatTestConfig, StatTestReport
 
@@ -23,24 +23,24 @@ class TestStatTestRegistry:
         assert test.config_type.model_fields["test"].default == name
 
     def test_paired_is_the_default_and_resolves_to_the_paired_implementation(self):
-        assert DEFAULT_STAT_TEST == "paired"
+        assert DEFAULT_STAT_TEST == "paired-t-test"
         assert StatTestConfig.model_fields["test"].default == DEFAULT_STAT_TEST
 
         test = resolve_stat_test(DEFAULT_STAT_TEST)
-        assert test.config_type is PairedTestConfig
-        assert test.build_report is paired.build_report
-        assert test.render_markdown is paired.render_markdown
-        assert test.summary is paired.summary
+        assert test.config_type is PairedTTestConfig
+        assert test.build_report is paired_t_test.build_report
+        assert test.render_markdown is paired_t_test.render_markdown
+        assert test.summary is paired_t_test.summary
 
     def test_unknown_test_name_lists_what_exists_and_suggests_the_close_one(self):
         with pytest.raises(ConfigError) as excinfo:
-            resolve_stat_test("paried")
+            resolve_stat_test("paired-t-tes")
         message = str(excinfo.value)
-        assert "Unknown statistical test 'paried'" in message
-        assert "Did you mean `paired`?" in message
+        assert "Unknown statistical test 'paired-t-tes'" in message
+        assert "Did you mean `paired-t-test`?" in message
 
     def test_stat_test_runs_the_test_the_name_selected(self, monkeypatch, capsys, tmp_path):
-        """A stub entry must be dispatched to instead of the paired implementation."""
+        """A stub entry must be dispatched to instead of the paired t-test implementation."""
         from nemo_gym.statistical_tests import registry
         from nemo_gym.statistical_tests.common import stat_test_from_config_dict
 
@@ -48,7 +48,7 @@ class TestStatTestRegistry:
             generated_at="2026-01-01T00:00:00+00:00",
             nemo_gym_version="0.0.0",
             command="gym eval stat-test ...",
-            test="paired",
+            test="paired-t-test",
             baseline_rollouts_jsonl_fpath="a.jsonl",
             baseline_aggregate_metrics_fpath="a_aggregate_metrics.json",
             candidate_rollouts_jsonl_fpath="b.jsonl",
@@ -61,9 +61,9 @@ class TestStatTestRegistry:
         calls = []
         monkeypatch.setitem(
             registry.STAT_TESTS,
-            "paired",
+            "paired-t-test",
             StatTest(
-                config_type=PairedTestConfig,
+                config_type=PairedTTestConfig,
                 build_report=lambda config, command: (calls.append(command), stub_report)[1],
                 render_markdown=lambda report: "stub markdown",
                 summary=lambda report, written: ("stub ran",),
@@ -76,7 +76,7 @@ class TestStatTestRegistry:
         assert calls[0].startswith("gym eval stat-test")
         assert "stub ran" in capsys.readouterr().out
         # --output-dir is the parent: the report always lands in a statistical_tests/ inside it.
-        stem = "paired__a__b__agent-agent__two-sided__alpha-0.05"
+        stem = "paired-t-test__a__b__agent-agent__two-sided__alpha-0.05"
         assert (tmp_path / STATS_SUBDIR_NAME / f"{stem}.md").read_text() == "stub markdown"
 
     def test_cli_test_flag_choices_match_the_registry(self):
@@ -93,7 +93,7 @@ class TestBuildConfig:
     """`build_config` rejects another test's flags instead of letting pydantic drop them."""
 
     def test_a_tests_own_flags_are_kept(self):
-        config = build_config(resolve_stat_test("paired"), {**BASE, "metric": ["reward"], "margin": [0.01]})
+        config = build_config(resolve_stat_test("paired-t-test"), {**BASE, "metric": ["reward"], "margin": [0.01]})
         assert config.metric == ["reward"]
         assert config.margin == [0.01]
 

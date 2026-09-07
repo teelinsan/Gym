@@ -6,8 +6,8 @@ from scipy import stats
 
 from nemo_gym.comparison.loading import LoadedRun
 from nemo_gym.config_types import ConfigError
-from nemo_gym.statistical_tests.paired import (
-    PairedTestConfig,
+from nemo_gym.statistical_tests.paired_t_test import (
+    PairedTTestConfig,
     build_report,
     paired_task_deltas,
     render_markdown,
@@ -60,8 +60,8 @@ def two_runs(tmp_path):
     return baseline, candidate
 
 
-def config_for(baseline, candidate, **overrides) -> PairedTestConfig:
-    return PairedTestConfig.model_validate(
+def config_for(baseline, candidate, **overrides) -> PairedTTestConfig:
+    return PairedTTestConfig.model_validate(
         {
             "baseline_rollouts_jsonl_fpath": str(baseline),
             "candidate_rollouts_jsonl_fpaths": [str(candidate)],
@@ -70,43 +70,43 @@ def config_for(baseline, candidate, **overrides) -> PairedTestConfig:
     )
 
 
-class TestPairedTestConfig:
+class TestPairedTTestConfig:
     def test_valid_minimal_config(self):
-        config = PairedTestConfig.model_validate(BASE)
-        assert config.test == "paired" and config.metric is None and config.margin is None
+        config = PairedTTestConfig.model_validate(BASE)
+        assert config.test == "paired-t-test" and config.metric is None and config.margin is None
 
     def test_the_default_is_a_two_sided_test_with_no_margin(self):
-        config = PairedTestConfig.model_validate(BASE)
+        config = PairedTTestConfig.model_validate(BASE)
         assert config.alternative == "two-sided" and config.margin is None
 
     @pytest.mark.parametrize("margin", [[-0.01], [0.1, -5]])
     def test_a_negative_margin_is_rejected(self, margin):
         with pytest.raises(ValidationError, match="--margin must be non-negative"):
-            PairedTestConfig.model_validate({**BASE, "margin": margin, "metric": ["a", "b"]})
+            PairedTTestConfig.model_validate({**BASE, "margin": margin, "metric": ["a", "b"]})
 
     def test_one_margin_per_metric_is_accepted_but_a_mismatched_count_is_not(self):
-        config = PairedTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02]})
+        config = PairedTTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02]})
         assert config.margin == [0.01, 0.02]
         # A single value is always fine -- it applies to every metric.
-        assert PairedTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01]}).margin == [0.01]
+        assert PairedTTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01]}).margin == [0.01]
         with pytest.raises(ValidationError, match="one per --metric"):
-            PairedTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02, 0.03]})
+            PairedTTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02, 0.03]})
 
     def test_a_margin_list_without_a_metric_list_is_rejected(self):
         """Without --metric there is no order to line the margins up against."""
         with pytest.raises(ValidationError, match="one per --metric"):
-            PairedTestConfig.model_validate({**BASE, "margin": [0.01, 0.02]})
+            PairedTTestConfig.model_validate({**BASE, "margin": [0.01, 0.02]})
 
     def test_filename_parts_reflect_the_alternative_the_margins_and_the_metric_subset(self):
-        assert PairedTestConfig.model_validate(BASE).filename_parts() == ["two-sided"]
-        assert PairedTestConfig.model_validate({**BASE, "alternative": "candidate-not-worse"}).filename_parts() == [
+        assert PairedTTestConfig.model_validate(BASE).filename_parts() == ["two-sided"]
+        assert PairedTTestConfig.model_validate({**BASE, "alternative": "candidate-not-worse"}).filename_parts() == [
             "candidate-not-worse"
         ]
-        assert PairedTestConfig.model_validate({**BASE, "margin": [0.01]}).filename_parts() == [
+        assert PairedTTestConfig.model_validate({**BASE, "margin": [0.01]}).filename_parts() == [
             "two-sided",
             "margin-0.01",
         ]
-        assert PairedTestConfig.model_validate(
+        assert PairedTTestConfig.model_validate(
             {**BASE, "metric": ["reward", "a/b"], "margin": [0.01, 0.02]}
         ).filename_parts() == ["metric-reward+a-b", "two-sided", "margin-0.01+0.02"]
 
@@ -218,7 +218,7 @@ class TestReportRendering:
     def test_markdown_is_a_plain_line_per_metric(self, tmp_path):
         report = build_report(config_for(*two_runs(tmp_path), metric=["reward"]), "gym eval stat-test ...")
         markdown = render_markdown(report)
-        assert "gym eval stat-test: paired" in markdown
+        assert "gym eval stat-test: paired t-test" in markdown
         assert "reward: n=6" in markdown
 
     def test_a_report_with_no_results_says_so(self, tmp_path):

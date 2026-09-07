@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The `paired` statistical test (`--test paired`, default): a paired-difference t-test."""
+"""The `paired-t-test` statistical test (`--test paired-t-test`, default): a paired-difference t-test."""
 
 from pathlib import Path
 from typing import List, Literal, Optional, Sequence, Tuple
@@ -18,8 +18,8 @@ from nemo_gym.statistical_tests.schema import StatTestConfig, StatTestReport
 Alternative = Literal["two-sided", "candidate-not-worse", "candidate-not-better"]
 
 
-class PairedTestConfig(StatTestConfig):
-    test: Literal["paired"] = "paired"
+class PairedTTestConfig(StatTestConfig):
+    test: Literal["paired-t-test"] = "paired-t-test"
     metric: Optional[List[str]] = Field(default=None, description="Metric(s) to test, e.g. `reward`.")
     margin: Optional[List[float]] = Field(
         default=None,
@@ -33,7 +33,7 @@ class PairedTestConfig(StatTestConfig):
     )
 
     @model_validator(mode="after")
-    def _check_margin(self) -> "PairedTestConfig":
+    def _check_margin(self) -> "PairedTTestConfig":
         if self.margin and (min(self.margin) < 0 or 1 < len(self.margin) != len(self.metric or [])):
             raise ValueError("--margin must be non-negative, and either a single value or one per --metric.")
         return self
@@ -47,7 +47,7 @@ class PairedTestConfig(StatTestConfig):
         return parts
 
 
-class PairedTestResult(BaseModel):
+class PairedTTestResult(BaseModel):
     metric: str
     margin: float = 0.0
     alternative: Alternative = "two-sided"
@@ -60,8 +60,8 @@ class PairedTestResult(BaseModel):
     note: Optional[str] = None
 
 
-class PairedTestReport(StatTestReport):
-    results: List[PairedTestResult] = Field(default_factory=list)
+class PairedTTestReport(StatTestReport):
+    results: List[PairedTTestResult] = Field(default_factory=list)
 
 
 def _groups_by_task(run: LoadedRun) -> dict:
@@ -97,8 +97,8 @@ def resolve_metrics(baseline: LoadedRun, candidate: LoadedRun, requested: Option
 def run_metric(
     baseline: LoadedRun, candidate: LoadedRun, *, metric: str, margin: float, alpha: float, alternative: Alternative
 ):
-    def result(**kw) -> PairedTestResult:
-        return PairedTestResult(metric=metric, margin=margin, alternative=alternative, alpha=alpha, **kw)
+    def result(**kw) -> PairedTTestResult:
+        return PairedTTestResult(metric=metric, margin=margin, alternative=alternative, alpha=alpha, **kw)
 
     deltas = paired_task_deltas(baseline, candidate, metric)
     if not deltas:
@@ -124,7 +124,7 @@ def run_metric(
     return result(n_pairs=n, mean_diff=mean_diff, se=se, p_value=float(p_value), significant=p_value < alpha)
 
 
-def build_report(config: PairedTestConfig, command: str) -> PairedTestReport:
+def build_report(config: PairedTTestConfig, command: str) -> PairedTTestReport:
     pair = load_run_pair(config)
 
     notes: List[str] = []
@@ -148,10 +148,10 @@ def build_report(config: PairedTestConfig, command: str) -> PairedTestReport:
         )
         for m, g in zip(metrics, margins * len(metrics) if len(margins) == 1 else margins)
     ]
-    return PairedTestReport(**pair.report_identity(config, command), notes=notes, results=results)
+    return PairedTTestReport(**pair.report_identity(config, command), notes=notes, results=results)
 
 
-def _result_line(result: PairedTestResult) -> str:
+def _result_line(result: PairedTTestResult) -> str:
     if result.p_value is None:
         return f"{result.metric}: {result.note}"
     return (
@@ -160,9 +160,9 @@ def _result_line(result: PairedTestResult) -> str:
     )
 
 
-def render_markdown(report: PairedTestReport) -> str:
+def render_markdown(report: PairedTTestReport) -> str:
     lines = [
-        "gym eval stat-test: paired",
+        "gym eval stat-test: paired t-test",
         f"Baseline:  {report.baseline_rollouts_jsonl_fpath} (agent {report.baseline_agent}, "
         f"{report.baseline_task_count} tasks)",
         f"Candidate: {report.candidate_rollouts_jsonl_fpath} (agent {report.candidate_agent}, "
@@ -177,7 +177,7 @@ def render_markdown(report: PairedTestReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def summary(report: PairedTestReport, written: Sequence[Path]) -> Tuple[str, ...]:
+def summary(report: PairedTTestReport, written: Sequence[Path]) -> Tuple[str, ...]:
     lines = [f"Baseline:  {report.baseline_agent}", f"Candidate: {report.candidate_agent}"]
     lines += [_result_line(result) for result in report.results]
     lines += [f"Wrote: {path}" for path in written]

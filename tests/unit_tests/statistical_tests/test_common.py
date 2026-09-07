@@ -77,7 +77,7 @@ class TestLoadRunPair:
 
         identity = load_run_pair(config).report_identity(config, "gym eval stat-test ...")
 
-        assert identity["test"] == "paired"
+        assert identity["test"] == "paired-t-test"
         assert identity["command"] == "gym eval stat-test ..."
         assert identity["baseline_task_count"] == 1 and identity["candidate_task_count"] == 1
         assert identity["generated_at"] and identity["nemo_gym_version"]
@@ -89,7 +89,7 @@ class TestReportStem:
             "generated_at": "2026-01-01T00:00:00+00:00",
             "nemo_gym_version": "0.0.0",
             "command": "gym eval stat-test ...",
-            "test": "paired",
+            "test": "paired-t-test",
             "baseline_rollouts_jsonl_fpath": "runs/run_a/rollouts.jsonl",
             "baseline_aggregate_metrics_fpath": "runs/run_a/rollouts_aggregate_metrics.json",
             "candidate_rollouts_jsonl_fpath": "runs/run_b/rollouts.jsonl",
@@ -104,8 +104,8 @@ class TestReportStem:
     def test_leads_with_the_test_name_so_two_tests_cannot_overwrite_each_other(self):
         config = StatTestConfig.model_validate(BASE)
         stem = report_stem(config, self._report())
-        assert stem.startswith("paired__")
-        assert stem == "paired__run_a-rollouts__run_b-rollouts__agent-default__alpha-0.05"
+        assert stem.startswith("paired-t-test__")
+        assert stem == "paired-t-test__run_a-rollouts__run_b-rollouts__agent-default__alpha-0.05"
 
     def test_a_second_baseline_against_the_same_candidate_does_not_overwrite_the_first(self):
         """The default output dir is the candidate's own, so only the stem separates two baselines."""

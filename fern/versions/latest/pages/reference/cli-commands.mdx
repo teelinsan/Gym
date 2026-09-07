@@ -780,7 +780,7 @@ Compare a baseline eval run against a candidate run and write a report.
 
 The report contains a metric table (the change, plus each side's value and confidence interval), split into key metrics and all other metrics, and a per-task sample-flips table. Confidence intervals are read from what each run recorded.
 
-By default, `gym eval compare` also runs a paired statistical significance test on every key metric with per-task pairing data (the same test [`gym eval stat-test`](#gym-eval-stat-test) runs standalone) and writes it to a separate `statistical_tests/` subdirectory next to the report 
+By default, `gym eval compare` also runs a paired t-test for statistical significance on every key metric with per-task pairing data (the same test [`gym eval stat-test`](#gym-eval-stat-test) runs standalone) and writes it to a separate `statistical_tests/` subdirectory next to the report 
 
 | Option | Description |
 | --- | --- |
@@ -836,7 +836,7 @@ Reports only the raw statistical output (n, mean difference, standard error, p-v
 | `--baseline-agg-metrics PATH` | Baseline's aggregate-metrics JSON, when it is not the sibling of `--baseline`. |
 | `--candidates-agg-metrics PATH[,PATH...]` | Candidate's aggregate-metrics JSON, when not the sibling of `--candidates`. |
 | `--agent NAME`, `--baseline-agent NAME`, `--candidate-agents NAME[,NAME...]` | Same agent-selection semantics as `gym eval compare`. |
-| `--test NAME` | Which statistical test to run. `paired` (the default) is the only one today; `--metric`, `--margin` and `--alternative` below belong to it. |
+| `--test NAME` | Which statistical test to run. `paired-t-test` (the default) is the only one today; `--metric`, `--margin` and `--alternative` below belong to it. |
 | `--metric METRIC[,METRIC...]` | Metric(s) to test (bare field name, e.g. `reward`, not `mean/reward`). Defaults to every key metric with per-task pairing data. |
 | `--margin DELTA[,DELTA...]` | Tolerance delta(s) for `--alternative`, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
 | `--alternative` | Which hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from typing import List
 
-from nemo_gym.statistical_tests.paired import PairedTestConfig
+from nemo_gym.statistical_tests.paired_t_test import PairedTTestConfig
 
 
 class TestCliFlagTranslation:
@@ -15,11 +15,11 @@ class TestCliFlagTranslation:
         assert unknown == [], f"flags left unparsed: {unknown}"
         return [token for flag in args._command.flags for token in flag.translate_to_hydra(args)]
 
-    def _config(self, argv: List[str]) -> PairedTestConfig:
+    def _config(self, argv: List[str]) -> PairedTTestConfig:
         from hydra.core.override_parser.overrides_parser import OverridesParser
 
         parsed = OverridesParser.create().parse_overrides(self._overrides(argv))
-        return PairedTestConfig.model_validate({o.key_or_group: o.value() for o in parsed})
+        return PairedTTestConfig.model_validate({o.key_or_group: o.value() for o in parsed})
 
     def test_paths_round_trip_through_hydra(self):
         config = self._config(
@@ -58,10 +58,10 @@ class TestCliFlagTranslation:
 
     def test_test_selector_round_trips_and_defaults_to_paired(self):
         argv = ["eval", "stat-test", "--baseline", "a.jsonl", "--candidates", "b.jsonl"]
-        assert self._config([*argv, "--test", "paired"]).test == "paired"
+        assert self._config([*argv, "--test", "paired-t-test"]).test == "paired-t-test"
         # Unset, the flag contributes no override and the pydantic default supplies the same value.
         assert not [token for token in self._overrides(argv) if token.startswith("+test=")]
-        assert self._config(argv).test == "paired"
+        assert self._config(argv).test == "paired-t-test"
 
     def test_eval_compare_gets_the_same_statistical_flags(self):
         overrides = self._overrides(

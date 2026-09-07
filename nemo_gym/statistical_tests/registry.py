@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Sequence, Tuple, Type
 
 from nemo_gym.cli.utils import did_you_mean
 from nemo_gym.config_types import ConfigError
-from nemo_gym.statistical_tests import paired
+from nemo_gym.statistical_tests import paired_t_test
 from nemo_gym.statistical_tests.common import report_stem, resolve_output_dir, write_reports
 from nemo_gym.statistical_tests.schema import StatTestConfig, StatTestReport
 
@@ -22,11 +22,11 @@ class StatTest:
 
 
 STAT_TESTS: Dict[str, StatTest] = {
-    "paired": StatTest(
-        config_type=paired.PairedTestConfig,
-        build_report=paired.build_report,
-        render_markdown=paired.render_markdown,
-        summary=paired.summary,
+    "paired-t-test": StatTest(
+        config_type=paired_t_test.PairedTTestConfig,
+        build_report=paired_t_test.build_report,
+        render_markdown=paired_t_test.render_markdown,
+        summary=paired_t_test.summary,
     ),
 }
 

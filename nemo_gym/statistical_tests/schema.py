@@ -12,7 +12,7 @@ from nemo_gym.config_types import RunSelectionConfig
 ReportFormat = Literal["md", "json", "both"]
 MAX_CANDIDATES = 1
 STATS_SUBDIR_NAME = "statistical_tests"
-DEFAULT_STAT_TEST = "paired"
+DEFAULT_STAT_TEST = "paired-t-test"
 
 
 class StatTestConfig(RunSelectionConfig):

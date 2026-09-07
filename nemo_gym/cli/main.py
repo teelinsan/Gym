@@ -669,7 +669,7 @@ _EVAL_RUN_SELECTION_FLAGS = (
 )
 
 # Statistical-test flags on both `eval compare` (its default stats step) and `eval stat-test`.
-# `--metric`/`--margin` belong to `paired`; a test that does not declare them rejects them rather
+# `--metric`/`--margin` belong to `paired-t-test`; a test that does not declare them rejects them rather
 # than ignoring them (`statistical_tests.registry.build_config`). A test-specific knob needs no flag
 # here at all -- it rides in through Hydra as `+<field>=<value>`.
 _STATISTICAL_TEST_FLAGS = (
@@ -1161,7 +1161,7 @@ COMMANDS = {
     ),
     "eval stat-test": Command(
         target="nemo_gym.cli.eval:stat_test",
-        summary="Statistical significance test between a baseline and a candidate run (default: paired).",
+        summary="Statistical significance test between a baseline and a candidate run (default: paired-t-test).",
         flags=(
             *_EVAL_RUN_SELECTION_FLAGS,
             _value_flag(
@@ -1180,7 +1180,9 @@ COMMANDS = {
             # Choices are spelled out rather than derived from `statistical_tests.registry`:
             # importing it here would put pydantic + the whole stats package on the path of every
             # `gym` invocation.
-            _value_flag("test", "test", "Statistical test to run (default: paired).", choices=("paired",)),
+            _value_flag(
+                "test", "test", "Statistical test to run (default: paired-t-test).", choices=("paired-t-test",)
+            ),
             *_STATISTICAL_TEST_FLAGS,
         ),
     ),

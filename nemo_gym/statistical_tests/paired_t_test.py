@@ -15,7 +15,7 @@ from nemo_gym.statistical_tests.common import fmt, fmt_bool, fmt_p, load_run_pai
 from nemo_gym.statistical_tests.schema import StatTestConfig, StatTestReport
 
 
-Alternative = Literal["two-sided", "candidate-not-worse", "candidate-not-better"]
+Alternative = Literal["two-sided", "candidate-lower", "candidate-higher"]
 
 
 class PairedTTestConfig(StatTestConfig):
@@ -23,13 +23,13 @@ class PairedTTestConfig(StatTestConfig):
     metric: Optional[List[str]] = Field(default=None, description="Metric(s) to test, e.g. `reward`.")
     margin: Optional[List[float]] = Field(
         default=None,
-        description="Tolerance delta(s), e.g. 0.01 for 1pp (default 0). One value for every metric, or one "
-        "per --metric in the same order. Ignored when --alternative is two-sided.",
+        description="Smallest difference(s) that count as a real change, e.g. 0.01 for 1pp (default 0). One "
+        "value for every metric, or one per --metric in the same order. Ignored when --alternative is two-sided.",
     )
     alternative: Alternative = Field(
         default="two-sided",
-        description="`two-sided`: did anything change at all. `candidate-not-worse`: the candidate is not "
-        "worse than the margin allows. `candidate-not-better`: the reverse.",
+        description="`two-sided`: did anything change at all. `candidate-lower`: the candidate metric dropped "
+        "by more than the margin. `candidate-higher`: it rose by more than the margin.",
     )
 
     @model_validator(mode="after")
@@ -109,18 +109,28 @@ def run_metric(
     if n < 2:
         return result(n_pairs=n, mean_diff=mean_diff, note="only 1 paired task: cannot estimate a standard error.")
 
-    # `candidate-not-worse` tests H0 mu_d <= -margin; `candidate-not-better` mirrors it at +margin.
-    sign = 1 if alternative == "candidate-not-worse" else -1
+    # `alternative` names H1 -- the claim a significant result demonstrates, never the one it assumes:
+    #   candidate-higher -> H0: mu_d == +margin vs H1: mu_d > +margin, tested in the right tail.
+    #   candidate-lower  -> H0: mu_d == -margin vs H1: mu_d < -margin, tested in the left tail.
+    # `sign` carries that direction: it places the boundary at sign*margin and picks H1's tail.
+    sign = 1 if alternative == "candidate-higher" else -1
     se = (sum((d - mean_diff) ** 2 for d in deltas) / (n - 1)) ** 0.5 / n**0.5
     if se < 1e-12:
-        significant = mean_diff != 0 if alternative == "two-sided" else sign * mean_diff > -margin
+        # No spread left to test against, so H1 either holds outright or it does not.
+        significant = mean_diff != 0 if alternative == "two-sided" else sign * mean_diff > margin
         p_value = 0.0 if significant else 1.0
         note = "every paired delta was identical (zero variance)."
         return result(n_pairs=n, mean_diff=mean_diff, se=0.0, p_value=p_value, significant=significant, note=note)
 
     df = n - 1
-    t_stat = mean_diff / se if alternative == "two-sided" else (mean_diff + sign * margin) / se
-    p_value = 2 * stats.t.sf(abs(t_stat), df) if alternative == "two-sided" else stats.t.sf(sign * t_stat, df)
+    if alternative == "two-sided":
+        t_stat = mean_diff / se
+        p_value = 2 * stats.t.sf(abs(t_stat), df)
+    else:
+        # How many standard errors the observed difference sits from H1's boundary, then the area
+        # beyond it in H1's tail. `sf(-t) == cdf(t)` by symmetry, so one `sf` serves both directions.
+        t_stat = (mean_diff - sign * margin) / se
+        p_value = stats.t.sf(sign * t_stat, df)
     return result(n_pairs=n, mean_diff=mean_diff, se=se, p_value=float(p_value), significant=p_value < alpha)
 
 

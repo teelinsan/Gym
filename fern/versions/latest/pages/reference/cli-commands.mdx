@@ -794,8 +794,8 @@ By default, `gym eval compare` also runs a paired t-test for statistical signifi
 | `--output-dir DIR`, `-o` | Where to write the report. Defaults to the directory containing the candidate rollouts JSONL. The statistics step writes into a `statistical_tests/` subdirectory of it. |
 | `--report-format` | `md`, `json`, or `both` (default). |
 | `--metric METRIC[,METRIC...]` | Restrict the statistics step to specific metric(s). Defaults to every key metric with per-task pairing data. |
-| `--margin DELTA[,DELTA...]` | Tolerance delta(s) for `--alternative`, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
-| `--alternative` | Which hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |
+| `--margin DELTA[,DELTA...]` | Smallest difference(s) that count as a real change, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
+| `--alternative` | Which alternative hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |
 | `--alpha` | Significance level for the statistics step (default `0.05`). |
 | `--no-stats` | Skip the statistics step entirely — no `statistical_tests/` directory is written. |
 
@@ -819,13 +819,17 @@ If a run was collected with `--disable-aggregation` it has no `*_aggregate_metri
 
 Statistical test of a baseline eval run against a candidate run — the same test `gym eval compare` can run, but standalone: `gym eval stat-test` never depends on `compare` having been run, and never reads or writes `compare_report.*`.
 
-`--alternative` chooses the hypothesis, and `--margin` sets the tolerance it is measured against:
+`--alternative` chooses the alternative hypothesis (the claim you are trying to demonstrate), and `--margin` sets how large a difference has to be before it counts:
 
 - **`two-sided`** (default): "did anything change at all" — for repeatability checks (same benchmark/model run twice). `--margin` is ignored.
-- **`candidate-not-worse`**: "the candidate is not worse than `--margin` allows" — for regression checks with a tolerance (e.g. for quantization: is accuracy within 1pp of the baseline).
-- **`candidate-not-better`**: the reverse, for confirming an intended improvement is real.
+- **`candidate-lower`**: "the candidate metric dropped by more than `--margin`" — for detecting a real regression (e.g. for quantization: did accuracy fall by more than 1pp).
+- **`candidate-higher`**: the mirror, for detecting a real improvement.
 
-`--margin` defaults to `0`, so a one-sided test without one is the plain "is the candidate worse/better at all" question.
+Both one-sided options are named for the *direction of the difference*, not for whether it is good news — a drop in `output_tokens` is an improvement, and the test does not presume otherwise.
+
+`--margin` defaults to `0`, so a one-sided test without one is the plain "did the candidate move at all in this direction" question. A larger margin makes a claim *harder* to establish, never easier.
+
+`significant=True` on a one-sided test means the change was demonstrated. `significant=False` means it could not be — which is **not** the same as proving the metric held steady, since an underpowered run (few tasks, high variance) also returns `False`.
 
 Reports only the raw statistical output (n, mean difference, standard error, p-value, significant) — no PASS/WARN/FAIL verdict.
 
@@ -838,8 +842,8 @@ Reports only the raw statistical output (n, mean difference, standard error, p-v
 | `--agent NAME`, `--baseline-agent NAME`, `--candidate-agents NAME[,NAME...]` | Same agent-selection semantics as `gym eval compare`. |
 | `--test NAME` | Which statistical test to run. `paired-t-test` (the default) is the only one today; `--metric`, `--margin` and `--alternative` below belong to it. |
 | `--metric METRIC[,METRIC...]` | Metric(s) to test (bare field name, e.g. `reward`, not `mean/reward`). Defaults to every key metric with per-task pairing data. |
-| `--margin DELTA[,DELTA...]` | Tolerance delta(s) for `--alternative`, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
-| `--alternative` | Which hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |
+| `--margin DELTA[,DELTA...]` | Smallest difference(s) that count as a real change, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
+| `--alternative` | Which alternative hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |
 | `--alpha` | Significance level (default `0.05`). |
 | `--output-dir DIR`, `-o` | Parent for the `statistical_tests/` directory the report is written into. Defaults to the candidate run's own directory. |
 | `--report-format` | `md`, `json`, or `both` (default). |
@@ -850,11 +854,11 @@ gym eval stat-test \
     --baseline runs/run_a/rollouts.jsonl \
     --candidates runs/run_b/rollouts.jsonl
 
-# Quantization: is the candidate not meaningfully worse than a 1pp margin?
+# Quantization: did the candidate's reward drop by more than 1pp?
 gym eval stat-test \
     --baseline runs/bf16/rollouts.jsonl \
     --candidates runs/nvfp4/rollouts.jsonl \
-    --metric reward --margin 0.01 --alternative candidate-not-worse
+    --metric reward --margin 0.01 --alternative candidate-lower
 ```
 
 Always writes into a `statistical_tests/` directory (under `--output-dir` when given, otherwise under the candidate run's own directory), with the filename indexed by everything that makes the invocation distinct.

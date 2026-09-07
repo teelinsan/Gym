@@ -22,13 +22,13 @@ from typing import List, Tuple
 
 from pydantic import ValidationError
 
-from nemo_gym import _resolve_under_cwd_or_install
 from nemo_gym.comparison.diff import compare_runs
 from nemo_gym.comparison.loading import build_loaded_run, load_agg_metrics_file, resolve_agent_selections
 from nemo_gym.comparison.report import write_reports
 from nemo_gym.comparison.schema import ComparisonConfig, ComparisonResult
 from nemo_gym.config_types import ConfigError
 from nemo_gym.package_info import __version__
+from nemo_gym.path_utils import report_dir_for
 from nemo_gym.secret_utils import hide_secrets_in_overrides
 
 
@@ -89,14 +89,11 @@ def build_comparison_result(config: ComparisonConfig, command: str) -> Compariso
 def resolve_output_dir(config: ComparisonConfig) -> Path:
     """`--output-dir`, defaulting to the candidate run's own directory.
 
-    The default resolves the candidate path the same way loading does, so the report lands next to
-    the metrics file that was actually read rather than at a same-named path under the cwd.
+    The default resolves the candidate path the same way loading does, so the report lands next to the
+    metrics file that was actually read rather than at a same-named path under the cwd -- except when that
+    would write into the install root. See :func:`~nemo_gym.path_utils.report_dir_for`.
     """
-    if config.output_dirpath:
-        p = Path(config.output_dirpath)
-        return p if p.is_absolute() else Path.cwd() / p
-    # if we use the same location as the candidate rollouts, it should be save to write there and we can use _resolve_under_cwd_or_install function
-    return _resolve_under_cwd_or_install(config.candidate_rollouts_jsonl_fpaths[-1]).parent
+    return report_dir_for(config.candidate_rollouts_jsonl_fpaths[-1], output_dirpath=config.output_dirpath)
 
 
 def run_comparison(config: ComparisonConfig, command: str) -> Tuple[ComparisonResult, List[Path]]:

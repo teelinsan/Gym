@@ -12,11 +12,11 @@ from typing import Any, Dict, List, Optional
 
 import orjson
 
-from nemo_gym import _resolve_under_cwd_or_install
 from nemo_gym.comparison.loading import LoadedRun, build_loaded_run, load_agg_metrics_file, resolve_agent_selections
 from nemo_gym.comparison.schema import RunFile
 from nemo_gym.config_types import ConfigError
 from nemo_gym.package_info import __version__
+from nemo_gym.path_utils import report_dir_for
 from nemo_gym.secret_utils import hide_secrets_in_overrides
 from nemo_gym.statistical_tests.schema import DEFAULT_STAT_TEST, STATS_SUBDIR_NAME, StatTestConfig, StatTestReport
 
@@ -119,12 +119,11 @@ def report_stem(config: StatTestConfig, report: StatTestReport) -> str:
 
 def resolve_output_dir(config: StatTestConfig) -> Path:
     """`<--output-dir, or the candidate run's own directory>/statistical_tests/`. Always nested."""
-    if config.output_dirpath:
-        base = Path(config.output_dirpath)
-        base = base if base.is_absolute() else Path.cwd() / base
-    else:
-        base = _resolve_under_cwd_or_install(config.candidate_rollouts_jsonl_fpaths[-1]).parent
-    return base / STATS_SUBDIR_NAME
+    return report_dir_for(
+        config.candidate_rollouts_jsonl_fpaths[-1],
+        output_dirpath=config.output_dirpath,
+        subdir=STATS_SUBDIR_NAME,
+    )
 
 
 def write_reports(output_dir: Path, stem: str, *, report_format: str, markdown: str, payload: dict) -> List[Path]:

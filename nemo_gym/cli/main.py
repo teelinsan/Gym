@@ -682,17 +682,17 @@ _STATISTICAL_TEST_FLAGS = (
     _comma_list_flag(
         "margin",
         "margin",
-        "Tolerance delta(s), e.g. 0.01 for 1pp (default: 0). One value for every metric, or one per "
-        "--metric in the same order. Ignored when --alternative is two-sided.",
+        "Smallest difference(s) that count as a real change, e.g. 0.01 for 1pp (default: 0). One value for "
+        "every metric, or one per --metric in the same order. Ignored when --alternative is two-sided.",
         metavar="DELTA[,DELTA...]",
     ),
     _value_flag(
         "alternative",
         "alternative",
-        "Which hypothesis to test (default: two-sided). `two-sided`: did anything change at all. "
-        "`candidate-not-worse`: the candidate is not worse than --margin allows. "
-        "`candidate-not-better`: the reverse.",
-        choices=("two-sided", "candidate-not-worse", "candidate-not-better"),
+        "Which alternative hypothesis to test (default: two-sided). `two-sided`: did anything change at all. "
+        "`candidate-lower`: the candidate metric dropped by more than --margin. "
+        "`candidate-higher`: it rose by more than --margin.",
+        choices=("two-sided", "candidate-lower", "candidate-higher"),
     ),
     _value_flag("alpha", "alpha", "Significance level (default: 0.05)."),
 )

@@ -1135,7 +1135,7 @@ class TestStatsWiring:
     def test_metric_margin_and_alpha_overrides_flow_through(self, tmp_path, monkeypatch):
         from nemo_gym.statistical_tests.schema import STATS_SUBDIR_NAME
 
-        self._stats_flags(monkeypatch, metric=["reward"], margin=[0.5], alpha=0.2, alternative="candidate-not-worse")
+        self._stats_flags(monkeypatch, metric=["reward"], margin=[0.5], alpha=0.2, alternative="candidate-lower")
         run_comparison(self._config(tmp_path), "gym eval compare ...")
 
         (stats_json,) = (tmp_path / "run_b" / STATS_SUBDIR_NAME).glob("*.json")
@@ -1143,7 +1143,7 @@ class TestStatsWiring:
         assert payload["results"][0]["metric"] == "reward"
         assert payload["results"][0]["margin"] == 0.5
         assert payload["results"][0]["alpha"] == 0.2
-        assert payload["results"][0]["alternative"] == "candidate-not-worse"
+        assert payload["results"][0]["alternative"] == "candidate-lower"
 
     def _config_without_pairing_data(self, tmp_path: Path) -> ComparisonConfig:
         """A run pair `compare` handles fine but the stats step cannot test: no per-task groups."""

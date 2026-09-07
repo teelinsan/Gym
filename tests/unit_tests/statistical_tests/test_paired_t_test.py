@@ -99,8 +99,8 @@ class TestPairedTTestConfig:
 
     def test_filename_parts_reflect_the_alternative_the_margins_and_the_metric_subset(self):
         assert PairedTTestConfig.model_validate(BASE).filename_parts() == ["two-sided"]
-        assert PairedTTestConfig.model_validate({**BASE, "alternative": "candidate-not-worse"}).filename_parts() == [
-            "candidate-not-worse"
+        assert PairedTTestConfig.model_validate({**BASE, "alternative": "candidate-lower"}).filename_parts() == [
+            "candidate-lower"
         ]
         assert PairedTTestConfig.model_validate({**BASE, "margin": [0.01]}).filename_parts() == [
             "two-sided",
@@ -167,26 +167,37 @@ class TestRunMetric:
         baseline = _run([_g(i, **{"mean/reward": 0.0}) for i in range(len(deltas))])
         return baseline, _run([_g(i, **{"mean/reward": d}) for i, d in enumerate(deltas)])
 
-    def test_regression_within_margin_is_not_meaningfully_worse(self):
+    def test_a_drop_smaller_than_the_margin_is_not_detected(self):
+        """A 5pp drop is real but under the 20pp bar, so it does not count as a meaningful change."""
         baseline, candidate = self._runs([-0.05, -0.06, -0.04, -0.05, -0.05, -0.06])
         result = run_metric(
-            baseline, candidate, metric="reward", margin=0.2, alpha=0.05, alternative="candidate-not-worse"
-        )
-        assert result.significant is True and result.p_value < 0.05
-
-    def test_a_regression_beyond_the_margin_is_not_cleared(self):
-        baseline, candidate = self._runs([-0.05, -0.06, -0.04, -0.05, -0.05, -0.06])
-        result = run_metric(
-            baseline, candidate, metric="reward", margin=0.0, alpha=0.05, alternative="candidate-not-worse"
+            baseline, candidate, metric="reward", margin=0.2, alpha=0.05, alternative="candidate-lower"
         )
         assert result.significant is False
 
-    def test_candidate_not_better_mirrors_candidate_not_worse(self):
-        """Same data, opposite question: an improvement clears `not-worse` but fails `not-better`."""
+    def test_a_consistent_drop_is_detected_once_the_margin_stops_hiding_it(self):
+        baseline, candidate = self._runs([-0.05, -0.06, -0.04, -0.05, -0.05, -0.06])
+        result = run_metric(
+            baseline, candidate, metric="reward", margin=0.0, alpha=0.05, alternative="candidate-lower"
+        )
+        assert result.significant is True and result.p_value < 0.05
+
+    def test_candidate_lower_mirrors_candidate_higher(self):
+        """Same data, opposite question: an improvement is detected by `higher` and never by `lower`."""
         baseline, candidate = self._runs([0.05, 0.06, 0.04, 0.05, 0.05, 0.06])
         kwargs = dict(metric="reward", margin=0.0, alpha=0.05)
-        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-not-worse").significant is True
-        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-not-better").significant is False
+        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-higher").significant is True
+        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-lower").significant is False
+
+    def test_one_sided_p_values_match_scipy_at_a_shifted_null(self):
+        """Pins the null LOCATION and the TAIL, so a future sign flip cannot pass silently."""
+        deltas = [0.2, -0.1, 0.3, 0.05, -0.05, 0.15]
+        baseline, candidate = self._runs(deltas)
+        kwargs = dict(metric="reward", margin=0.1, alpha=0.05)
+        higher = run_metric(baseline, candidate, **kwargs, alternative="candidate-higher")
+        lower = run_metric(baseline, candidate, **kwargs, alternative="candidate-lower")
+        assert higher.p_value == pytest.approx(stats.ttest_1samp(deltas, popmean=0.1, alternative="greater").pvalue)
+        assert lower.p_value == pytest.approx(stats.ttest_1samp(deltas, popmean=-0.1, alternative="less").pvalue)
 
     def test_alpha_decides_significance_rather_than_a_hardcoded_level(self):
         baseline, candidate = self._runs([0.2, -0.1, 0.3, 0.05, -0.05, 0.15])

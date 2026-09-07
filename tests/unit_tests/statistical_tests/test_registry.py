@@ -42,7 +42,7 @@ class TestStatTestRegistry:
     def test_stat_test_runs_the_test_the_name_selected(self, monkeypatch, capsys, tmp_path):
         """A stub entry must be dispatched to instead of the paired implementation."""
         from nemo_gym.statistical_tests import registry
-        from nemo_gym.statistical_tests.common import _stat_test
+        from nemo_gym.statistical_tests.common import stat_test_from_config_dict
 
         stub_report = StatTestReport(
             generated_at="2026-01-01T00:00:00+00:00",
@@ -70,7 +70,7 @@ class TestStatTestRegistry:
             ),
         )
 
-        _stat_test(PairedTestConfig.model_validate({**BASE, "output_dirpath": str(tmp_path)}), "stat-test")
+        stat_test_from_config_dict({**BASE, "output_dirpath": str(tmp_path)}, "stat-test")
 
         assert calls, "the registered build_report was never called -- dispatch is still hardcoded"
         assert calls[0].startswith("gym eval stat-test")

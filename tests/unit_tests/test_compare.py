@@ -1116,10 +1116,32 @@ class TestStatsWiring:
         )
         assert list((run_b_dir / STATS_SUBDIR_NAME).iterdir()), "expected at least one statistical_tests/ artifact"
 
+    def test_the_statistical_test_is_appended_to_the_compare_markdown(self, tmp_path, monkeypatch):
+        """The test's own report is also carried into `compare_report.md`, under its own heading."""
+        self._stats_flags(monkeypatch, metric=["reward"])
+        _, written = run_comparison(self._config(tmp_path), "gym eval compare ...")
+
+        (markdown,) = [path for path in written if path.suffix == ".md"]
+        text = markdown.read_text()
+        assert "## Statistical test" in text
+        # Verbatim, so the embedded copy says the same thing as the standalone artifact.
+        assert "reward: n=6" in text
+        (standalone,) = (tmp_path / "run_b" / "statistical_tests").glob("*.md")
+        assert standalone.read_text().strip() in text
+
     def test_no_stats_skips_the_step_entirely(self, tmp_path, monkeypatch):
         self._stats_flags(monkeypatch)
-        run_comparison(self._config(tmp_path, no_stats=True), "gym eval compare ...")
+        _, written = run_comparison(self._config(tmp_path, no_stats=True), "gym eval compare ...")
         assert not (tmp_path / "run_b" / "statistical_tests").exists()
+        assert "## Statistical test" not in [path for path in written if path.suffix == ".md"][0].read_text()
+
+    def test_a_json_only_run_still_writes_the_statistical_test_artifacts(self, tmp_path, monkeypatch):
+        """Nothing to append to without a markdown report, but the test itself still runs."""
+        self._stats_flags(monkeypatch)
+        _, written = run_comparison(self._config(tmp_path, report_format="json"), "gym eval compare ...")
+
+        assert [path.suffix for path in written] == [".json"]
+        assert list((tmp_path / "run_b" / "statistical_tests").iterdir())
 
     def test_output_dir_is_shared_and_the_stats_step_nests_inside_it(self, tmp_path, monkeypatch):
         """One --output-dir now: compare_report.* in it, the statistics under statistical_tests/."""

@@ -76,8 +76,9 @@ class TestStatTestRegistry:
         assert calls[0].startswith("gym eval stat-test")
         assert "stub ran" in capsys.readouterr().out
         # --output-dir is the parent: the report always lands in a statistical_tests/ inside it.
-        stem = "paired-t-test__a__b__agent-agent__two-sided__alpha-0.05"
-        assert (tmp_path / STATS_SUBDIR_NAME / f"{stem}.md").read_text() == "stub markdown"
+        stem = "paired-t-test__a__b__agent-agent__two-sided__alpha-0.05__*"
+        (written,) = (tmp_path / STATS_SUBDIR_NAME).glob(f"{stem}.md")
+        assert written.read_text() == "stub markdown"
 
     def test_cli_test_flag_choices_match_the_registry(self):
         from nemo_gym.cli.main import COMMANDS

@@ -7,6 +7,7 @@ import shlex
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -60,7 +61,7 @@ class RunPair:
             "candidate_agent": self.candidate_agent,
             "baseline_task_count": self.baseline.num_tasks,
             "candidate_task_count": self.candidate.num_tasks,
-            "warnings": self.warnings,
+            "warnings": list(self.warnings),  # a copy: the report appends its own without touching the pair
         }
 
 
@@ -109,11 +110,17 @@ def sanitize_filename_part(text: str) -> str:
 
 
 def report_stem(config: StatTestConfig, report: StatTestReport) -> str:
-    """Names the run pair and agents too, so a second baseline/candidate/agent lands beside it, not on it."""
+    """Names the run pair and agents too, so a second baseline/candidate/agent lands beside it, not on it.
+
+    The readable parts name each run by its leaf directory only, so the trailing digest of the full paths is
+    what keeps `alpha/run_b/` and `beta/run_b/` apart. It is derived, not random: rerunning the same pair
+    refreshes its own report rather than piling up a new one.
+    """
     runs = (report.baseline_rollouts_jsonl_fpath, report.candidate_rollouts_jsonl_fpath)
     agents = dict.fromkeys([report.baseline_agent, report.candidate_agent])
+    digest = sha256("\0".join(str(Path(r).resolve()) for r in runs).encode()).hexdigest()[:8]
     parts = [config.test, *(f"{Path(r).parent.name}-{Path(r).stem}" for r in runs)]
-    parts += [f"agent-{'-vs-'.join(agents)}", *config.filename_parts(), f"alpha-{config.alpha:g}"]
+    parts += [f"agent-{'-vs-'.join(agents)}", *config.filename_parts(), f"alpha-{config.alpha:g}", digest]
     return "__".join(sanitize_filename_part(p) for p in parts)
 
 
@@ -143,11 +150,12 @@ def write_reports(output_dir: Path, stem: str, *, report_format: str, markdown: 
         raise ConfigError(f"Cannot write the report into '{output_dir}': {e}") from e
 
 
-def stat_test_from_config_dict(config_dict: Any, subcommand: str) -> None:
+def stat_test_from_config_dict(config_dict: Any, subcommand: str) -> str:
     """Pick the test named by `--test`, validate that test's own config out of `config_dict`, run it.
 
     The entry point for both callers: `gym eval stat-test` passes the global config dict, and
-    `gym eval compare`'s stats step passes it merged under its own config.
+    `gym eval compare`'s stats step passes it merged under its own config. Returns the report's
+    markdown, so `compare` can carry it into its own report as well as the standalone file.
     """
     from nemo_gym.statistical_tests.registry import build_config, resolve_stat_test, run_stat_test
 
@@ -156,3 +164,4 @@ def stat_test_from_config_dict(config_dict: Any, subcommand: str) -> None:
     # Record whichever command actually ran: sys.argv holds *its* overrides, not stat-test's.
     report, written = run_stat_test(test, config, invoked_command(subcommand))
     print("\n".join(test.summary(report, written)))
+    return test.render_markdown(report)

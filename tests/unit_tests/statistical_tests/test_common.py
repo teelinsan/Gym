@@ -105,7 +105,15 @@ class TestReportStem:
         config = StatTestConfig.model_validate(BASE)
         stem = report_stem(config, self._report())
         assert stem.startswith("paired-t-test__")
-        assert stem == "paired-t-test__run_a-rollouts__run_b-rollouts__agent-default__alpha-0.05"
+        assert stem.startswith("paired-t-test__run_a-rollouts__run_b-rollouts__agent-default__alpha-0.05__")
+
+    def test_two_runs_sharing_a_leaf_directory_name_do_not_overwrite_each_other(self):
+        """Only the leaf directory is readable in the stem, so `alpha/run_b` and `beta/run_b` collide there."""
+        config = StatTestConfig.model_validate({**BASE, "output_dirpath": "/tmp/reports"})
+        from_alpha = report_stem(config, self._report(candidate_rollouts_jsonl_fpath="alpha/run_b/rollouts.jsonl"))
+        from_beta = report_stem(config, self._report(candidate_rollouts_jsonl_fpath="beta/run_b/rollouts.jsonl"))
+        assert from_alpha != from_beta
+        assert from_alpha.rsplit("__", 1)[0] == from_beta.rsplit("__", 1)[0]  # identical but for the digest
 
     def test_a_second_baseline_against_the_same_candidate_does_not_overwrite_the_first(self):
         """The default output dir is the candidate's own, so only the stem separates two baselines."""

@@ -107,10 +107,18 @@ def run_comparison(config: ComparisonConfig, command: str) -> Tuple[ComparisonRe
 
         try:
             # `config` wins for everything it declares; the rest carries the test's own flags.
-            stat_test_from_config_dict({**(maybe_get_global_config_dict() or {}), **config.model_dump()}, "compare")
+            stats_config_dict = {**(maybe_get_global_config_dict() or {}), **config.model_dump()}
+            stats_markdown = stat_test_from_config_dict(stats_config_dict, "compare")
         except (ConfigError, ValidationError) as e:
             # A side effect of a comparison that already succeeded and was written: report it,
             # never turn a good `gym eval compare` into a failure.
             print(f"Skipped the statistical test: {e}")
+        else:
+            # Fenced verbatim: the test's report is line-oriented plain text, which markdown
+            # would otherwise reflow into a single paragraph.
+            section = f"\n## Statistical test\n\n```\n{stats_markdown.strip()}\n```\n"
+            for markdown_report in [path for path in written if path.suffix == ".md"]:
+                with markdown_report.open("a", encoding="utf-8") as f:
+                    f.write(section)
 
     return result, written

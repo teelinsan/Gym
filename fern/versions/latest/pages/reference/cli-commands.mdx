@@ -780,7 +780,7 @@ Compare a baseline eval run against a candidate run and write a report.
 
 The report contains a metric table (the change, plus each side's value and confidence interval), split into key metrics and all other metrics, and a per-task sample-flips table. Confidence intervals are read from what each run recorded.
 
-By default, `gym eval compare` also runs a paired t-test for statistical significance on every key metric with per-task pairing data (the same test [`gym eval stat-test`](#gym-eval-stat-test) runs standalone) and writes it to a separate `statistical_tests/` subdirectory next to the report 
+By default — provided the comparison resolves to a single agent pair, which is the usual case — `gym eval compare` also runs a paired t-test for statistical significance on every key metric with per-task pairing data (the same test [`gym eval stat-test`](#gym-eval-stat-test) runs standalone) and writes it to a separate `statistical_tests/` subdirectory next to the report. A comparison spanning several agents skips the step and says so; pass `--agent` to pick one.
 
 | Option | Description |
 | --- | --- |
@@ -831,7 +831,7 @@ Both one-sided options are named for the *direction of the difference*, not for 
 
 `significant=True` on a one-sided test means the change was demonstrated. `significant=False` means it could not be — which is **not** the same as proving the metric held steady, since an underpowered run (few tasks, high variance) also returns `False`.
 
-Reports only the raw statistical output (n, mean difference, standard error, p-value, significant) — no PASS/WARN/FAIL verdict.
+Reports only the raw statistical output (n, mean difference, standard error, p-value, significant) — no PASS/WARN/FAIL verdict. A metric whose paired tasks cover less than half of the larger run is reported without a verdict, and any unpaired task raises a warning.
 
 | Option | Description |
 | --- | --- |
@@ -843,7 +843,7 @@ Reports only the raw statistical output (n, mean difference, standard error, p-v
 | `--test NAME` | Which statistical test to run. `paired-t-test` (the default) is the only one today; `--metric`, `--margin` and `--alternative` below belong to it. |
 | `--metric METRIC[,METRIC...]` | Metric(s) to test (bare field name, e.g. `reward`, not `mean/reward`). Defaults to every key metric with per-task pairing data. |
 | `--margin DELTA[,DELTA...]` | Smallest difference(s) that count as a real change, e.g. `0.01` for 1pp (default `0`). One value applying to every metric, or one per `--metric` in the same order. Ignored when `--alternative` is `two-sided`. |
-| `--alternative` | Which alternative hypothesis to test (default `two-sided`). See [`gym eval stat-test`](#gym-eval-stat-test). |
+| `--alternative` | Which alternative hypothesis to test: `two-sided` (default), `candidate-lower`, or `candidate-higher`, as described above. |
 | `--alpha` | Significance level (default `0.05`). |
 | `--output-dir DIR`, `-o` | Parent for the `statistical_tests/` directory the report is written into. Defaults to the candidate run's own directory. |
 | `--report-format` | `md`, `json`, or `both` (default). |

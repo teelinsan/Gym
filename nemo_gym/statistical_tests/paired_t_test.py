@@ -18,6 +18,11 @@ from nemo_gym.statistical_tests.schema import StatTestConfig, StatTestReport
 
 Alternative = Literal["two-sided", "candidate-lower", "candidate-higher"]
 
+# Differences this small are float64 rounding noise rather than signal.
+EPS = 1e-12
+# Below this share of the larger run's tasks, the two runs overlap too little to conclude anything.
+MIN_PAIRED_COVERAGE = 0.5
+
 
 class PairedTTestConfig(StatTestConfig):
     test: Literal["paired-t-test"] = "paired-t-test"
@@ -35,6 +40,10 @@ class PairedTTestConfig(StatTestConfig):
 
     @model_validator(mode="after")
     def _check_margin(self) -> "PairedTTestConfig":
+        # Margins pair 1:1 with metrics, so dedupe before counting: otherwise `--metric acc,acc --margin 0.1,0.2`
+        # passes the length check and then silently drops 0.2 when the duplicate collapses.
+        if self.metric:
+            self.metric = list(dict.fromkeys(self.metric))
         if not self.margin:
             return self
         # `m < 0` alone would admit NaN, since every NaN comparison is False -- and a NaN margin
@@ -111,8 +120,11 @@ def run_metric(
     if not deltas:
         return result(n_pairs=0, note=f"no per-task `mean/{metric}` value on both sides for any common task.")
 
-    n = len(deltas)
+    n, n_tasks = len(deltas), max(baseline.num_tasks, candidate.num_tasks)
     mean_diff = sum(deltas) / n
+    if n < MIN_PAIRED_COVERAGE * n_tasks:
+        note = f"only {n} of {n_tasks} tasks paired: too little overlap to draw a conclusion."
+        return result(n_pairs=n, mean_diff=mean_diff, note=note)
     if n < 2:
         return result(n_pairs=n, mean_diff=mean_diff, note="only 1 paired task: cannot estimate a standard error.")
 
@@ -122,9 +134,10 @@ def run_metric(
     # `sign` carries that direction: it places the boundary at sign*margin and picks H1's tail.
     sign = 1 if alternative == "candidate-higher" else -1
     se = (sum((d - mean_diff) ** 2 for d in deltas) / (n - 1)) ** 0.5 / n**0.5
-    if se < 1e-12:
-        # No spread left to test against, so H1 either holds outright or it does not.
-        significant = mean_diff != 0 if alternative == "two-sided" else sign * mean_diff > margin
+    if se < EPS:
+        # No spread left to test against, so H1 either holds outright or it does not -- decided with the
+        # same tolerance that opened this branch, so rounding noise cannot read as a certain difference.
+        significant = abs(mean_diff) > EPS if alternative == "two-sided" else sign * mean_diff > margin + EPS
         p_value = 0.0 if significant else 1.0
         note = "every paired delta was identical (zero variance)."
         return result(n_pairs=n, mean_diff=mean_diff, se=0.0, p_value=p_value, significant=significant, note=note)
@@ -146,7 +159,7 @@ def build_report(config: PairedTTestConfig, command: str) -> PairedTTestReport:
 
     notes: List[str] = []
     if config.metric:
-        metrics = list(dict.fromkeys(config.metric))
+        metrics = config.metric  # already deduped by `_check_margin`, which lines the margins up against it
         for metric in metrics:
             if not paired_task_deltas(pair.baseline, pair.candidate, metric):
                 raise ConfigError(f"--metric '{metric}' has no per-task `mean/{metric}` value on both sides.")
@@ -165,7 +178,12 @@ def build_report(config: PairedTTestConfig, command: str) -> PairedTTestReport:
         )
         for m, g in zip(metrics, margins * len(metrics) if len(margins) == 1 else margins)
     ]
-    return PairedTTestReport(**pair.report_identity(config, command), notes=notes, results=results)
+    identity = pair.report_identity(config, command)
+    n_tasks = max(pair.baseline.num_tasks, pair.candidate.num_tasks)
+    unpaired = [f"{r.metric} ({r.n_pairs} of {n_tasks})" for r in results if r.n_pairs < n_tasks]
+    if unpaired:
+        identity["warnings"].append(f"Not every task paired across the two runs: {', '.join(unpaired)}.")
+    return PairedTTestReport(**identity, notes=notes, results=results)
 
 
 def _result_line(result: PairedTTestResult) -> str:
@@ -197,5 +215,6 @@ def render_markdown(report: PairedTTestReport) -> str:
 def summary(report: PairedTTestReport, written: Sequence[Path]) -> Tuple[str, ...]:
     lines = [f"Baseline:  {report.baseline_agent}", f"Candidate: {report.candidate_agent}"]
     lines += [_result_line(result) for result in report.results]
+    lines += [f"Warning: {warning}" for warning in report.warnings]
     lines += [f"Wrote: {path}" for path in written]
     return tuple(lines)

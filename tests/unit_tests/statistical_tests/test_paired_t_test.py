@@ -103,6 +103,12 @@ class TestPairedTTestConfig:
         with pytest.raises(ValidationError, match="one per --metric"):
             PairedTTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02, 0.03]})
 
+    def test_a_duplicate_metric_cannot_hide_a_margin(self):
+        """`--metric acc,acc --margin 0.1,0.2` used to pass and then silently drop 0.2: margins pair 1:1."""
+        with pytest.raises(ValidationError, match="one per --metric"):
+            PairedTTestConfig.model_validate({**BASE, "metric": ["acc", "acc"], "margin": [0.1, 0.2]})
+        assert PairedTTestConfig.model_validate({**BASE, "metric": ["acc", "acc"]}).metric == ["acc"]
+
     def test_a_margin_list_without_a_metric_list_is_rejected(self):
         """Without --metric there is no order to line the margins up against."""
         with pytest.raises(ValidationError, match="one per --metric"):
@@ -166,6 +172,38 @@ class TestRunMetric:
         result = run_metric(baseline, candidate, metric="reward", margin=0.0, alpha=0.05, alternative="two-sided")
         assert result.se == 0.0 and result.p_value == 0.0 and result.significant is True
 
+    def test_zero_variance_one_sided_answers_the_directional_question_against_the_margin(self):
+        """The shortcut still has to respect both the direction and the margin, not just `mean_diff != 0`."""
+        baseline, candidate = self._runs([-0.5] * 4)
+        kwargs = dict(metric="reward", margin=0.2, alpha=0.05)
+        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-lower").significant is True
+        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-higher").significant is False
+        # A consistent drop smaller than the margin is not the change the margin asked about.
+        smaller_than_the_margin = self._runs([-0.1] * 4)
+        assert run_metric(*smaller_than_the_margin, **kwargs, alternative="candidate-lower").significant is False
+
+    def test_zero_variance_treats_float64_rounding_noise_as_no_change(self):
+        """`0.1 + 0.2 != 0.3` in float64: a constant ~1e-17 offset is noise, not a difference with p=0."""
+        baseline = _run([_g(i, **{"mean/reward": 0.1 + 0.2}) for i in range(4)])
+        candidate = _run([_g(i, **{"mean/reward": 0.3}) for i in range(4)])
+        kwargs = dict(metric="reward", margin=0.0, alpha=0.05)
+        assert run_metric(baseline, candidate, **kwargs, alternative="two-sided").significant is False
+        assert run_metric(baseline, candidate, **kwargs, alternative="candidate-lower").significant is False
+
+    def test_a_thin_pairing_is_reported_without_a_verdict(self):
+        """One task in common out of ten a side: report the overlap, do not conclude from it."""
+        baseline = _run([_g(i, **{"mean/reward": 0.4}) for i in range(10)])
+        candidate = _run([_g(i + 9, **{"mean/reward": 0.7}) for i in range(10)])
+        result = run_metric(baseline, candidate, metric="reward", margin=0.0, alpha=0.05, alternative="two-sided")
+        assert result.n_pairs == 1 and result.p_value is None and result.significant is None
+        assert "1 of 10 tasks paired" in result.note
+
+    def test_a_pairing_at_the_coverage_floor_is_still_tested(self):
+        baseline = _run([_g(i, **{"mean/reward": 0.4}) for i in range(6)])
+        candidate = _run([_g(i, **{"mean/reward": 0.7 + i * 0.01}) for i in range(3)])
+        result = run_metric(baseline, candidate, metric="reward", margin=0.0, alpha=0.05, alternative="two-sided")
+        assert result.n_pairs == 3 and result.p_value is not None
+
     def test_p_value_matches_scipy_ttest_1samp_directly(self):
         deltas = [0.2, -0.1, 0.3, 0.05, -0.05, 0.15]
         baseline = _run([_g(i, **{"mean/reward": 0.0}) for i in range(len(deltas))])
@@ -223,6 +261,33 @@ class TestBuildReport:
         report = build_report(config_for(*two_runs(tmp_path)), "gym eval stat-test ...")
         assert [result.metric for result in report.results] == ["reward"]
         assert report.notes == ["Skipped 1 key metric(s) with no per-task pairing data: pass@1/accuracy."]
+
+    def test_each_margin_is_applied_to_its_own_metric(self, tmp_path):
+        """`--metric reward,latency --margin 0.01,0.5`: swapping the pairing flips both verdicts."""
+        baseline = _write_run(
+            tmp_path, "run_a", [_entry(groups=[_group(i, [0.5], extra={"mean/latency": 10.0}) for i in range(6)])]
+        )
+        candidate = _write_run(
+            tmp_path,
+            "run_b",
+            [_entry(groups=[_group(i, [0.6 + i * 0.01], extra={"mean/latency": 10.02 + i * 0.01}) for i in range(6)])],
+        )
+        config = config_for(
+            baseline, candidate, metric=["reward", "latency"], margin=[0.01, 0.5], alternative="candidate-higher"
+        )
+
+        results = build_report(config, "gym eval stat-test ...").results
+
+        # reward rose ~0.125 (well past its 0.01 margin); latency rose ~0.045 (nowhere near its 0.5 margin).
+        assert [(r.metric, r.margin) for r in results] == [("reward", 0.01), ("latency", 0.5)]
+        assert [r.significant for r in results] == [True, False]
+
+    def test_unpaired_tasks_raise_a_warning_on_the_report(self, tmp_path):
+        baseline = _write_run(tmp_path, "run_a", [_entry(groups=[_group(i, [1.0, 0.0]) for i in range(4)])])
+        candidate = _write_run(tmp_path, "run_b", [_entry(groups=[_group(i, [1.0, 1.0]) for i in range(3)])])
+        report = build_report(config_for(baseline, candidate, metric=["reward"]), "gym eval stat-test ...")
+        assert report.results[0].n_pairs == 3
+        assert report.warnings == ["Not every task paired across the two runs: reward (3 of 4)."]
 
     def test_an_explicitly_named_metric_with_no_pairing_data_raises(self, tmp_path):
         config = config_for(*two_runs(tmp_path), metric=["does_not_exist"])

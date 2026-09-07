@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The `paired-t-test` statistical test (`--test paired-t-test`, default): a paired-difference t-test."""
 
+from math import isfinite
 from pathlib import Path
 from typing import List, Literal, Optional, Sequence, Tuple
 
@@ -34,8 +35,14 @@ class PairedTTestConfig(StatTestConfig):
 
     @model_validator(mode="after")
     def _check_margin(self) -> "PairedTTestConfig":
-        if self.margin and (min(self.margin) < 0 or 1 < len(self.margin) != len(self.metric or [])):
-            raise ValueError("--margin must be non-negative, and either a single value or one per --metric.")
+        if not self.margin:
+            return self
+        # `m < 0` alone would admit NaN, since every NaN comparison is False -- and a NaN margin
+        # silently poisons the t-statistic into a NaN p-value that never compares significant.
+        if any(not isfinite(m) or m < 0 for m in self.margin):
+            raise ValueError(f"--margin must be non-negative and finite (got {self.margin}).")
+        if 1 < len(self.margin) != len(self.metric or []):
+            raise ValueError("--margin must be either a single value or one per --metric.")
         return self
 
     def filename_parts(self) -> List[str]:

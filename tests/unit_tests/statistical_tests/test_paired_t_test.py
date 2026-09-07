@@ -84,6 +84,17 @@ class TestPairedTTestConfig:
         with pytest.raises(ValidationError, match="--margin must be non-negative"):
             PairedTTestConfig.model_validate({**BASE, "margin": margin, "metric": ["a", "b"]})
 
+    @pytest.mark.parametrize("margin", [[float("nan")], [float("inf")], [float("-inf")], [0.1, float("nan")]])
+    def test_a_non_finite_margin_is_rejected(self, margin):
+        """NaN survives a bare `< 0` check (every NaN comparison is False) and would yield a NaN p-value."""
+        with pytest.raises(ValidationError, match="--margin must be non-negative"):
+            PairedTTestConfig.model_validate({**BASE, "margin": margin, "metric": ["a", "b"]})
+
+    @pytest.mark.parametrize("margin", [[0.0], [0.0, 0.0], [0.01, 2.5]])
+    def test_a_non_negative_margin_is_accepted(self, margin):
+        """Zero is the default and stays legal: it makes a one-sided test the plain shifted-null test."""
+        assert PairedTTestConfig.model_validate({**BASE, "margin": margin, "metric": ["a", "b"]}).margin == margin
+
     def test_one_margin_per_metric_is_accepted_but_a_mismatched_count_is_not(self):
         config = PairedTTestConfig.model_validate({**BASE, "metric": ["a", "b"], "margin": [0.01, 0.02]})
         assert config.margin == [0.01, 0.02]
